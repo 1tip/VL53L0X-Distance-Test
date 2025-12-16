@@ -7,18 +7,19 @@
  *  - 연속 측정 모드 사용
  *
  * Hardware:
- *  - SDA   : GPIO 4
- *  - SCL   : GPIO 5
- *  - XSHUT : GPIO 6 (optional)
+ *  - SDA   : GPIO 5
+ *  - SCL   : GPIO 6
+ *  - int   : GPIO 7 (optional)
+ *  - XSHUT : GPIO 8 (optional)
  ***************************************************************/
 
 #include <Wire.h>
 #include <Adafruit_VL53L0X.h>
 
 // ---------------- PIN CONFIG ----------------
-#define I2C_SDA   4
-#define I2C_SCL   5
-#define XSHUT_PIN 6   // 사용하지 않으면 주석 처리 가능
+#define I2C_SDA   5
+#define I2C_SCL   6
+#define XSHUT_PIN 7   // 사용하지 않으면 주석 처리 가능
 
 Adafruit_VL53L0X lox = Adafruit_VL53L0X();
 
