@@ -1,0 +1,90 @@
+/***************************************************************
+ * ESP32-C3 + VL53L0X + 0.42" OLED (U8g2)
+ *
+ * Summary:
+ *  - TOF050C를 VL53L0X로 사용
+ *  - 거리(mm)를 OLED + Serial에 출력
+ *  - OLED: SSD1306 72x40, U8g2 사용
+ *
+ * Fixed I2C Pins (Board Internal):
+ *  - SDA : GPIO 5
+ *  - SCL : GPIO 6
+ ***************************************************************/
+
+#include <Wire.h>
+#include <Adafruit_VL53L0X.h>
+#include <U8g2lib.h>
+
+// -------- FIXED I2C PINS --------
+#define OLED_SDA 5
+#define OLED_SCL 6
+
+// -------- OBJECTS --------
+Adafruit_VL53L0X lox;
+//U8G2_SSD1306_72X40_ER_1_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE);  // 안됨(사용방법다름)
+U8G2_SSD1306_72X40_ER_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE);   // EastRising 0.42" OLED
+
+void setup() {
+  Serial.begin(115200);
+  delay(500);
+
+  // I2C 시작 (내장 OLED 핀 고정)
+  Wire.begin(OLED_SDA, OLED_SCL);
+  Wire.setClock(400000);   // VL53L0X 안정 동작
+
+  // OLED 초기화
+  u8g2.begin();
+  u8g2.clearBuffer();
+  u8g2.setFont(u8g2_font_6x12_tf);
+  u8g2.drawStr(0, 12, "VL53L0X");
+  u8g2.drawStr(0, 28, "Init...");
+  u8g2.sendBuffer();
+
+  // VL53L0X 초기화
+  if (!lox.begin()) {
+    u8g2.clearBuffer();
+    u8g2.drawStr(0, 20, "TOF ERROR");
+    u8g2.sendBuffer();
+    Serial.println("VL53L0X init failed");
+    while (1) delay(100);
+  }
+
+  // 정확도 설정 (선택)
+  lox.configSensor(Adafruit_VL53L0X::VL53L0X_SENSE_HIGH_ACCURACY);
+
+  u8g2.clearBuffer();
+  u8g2.drawStr(0, 20, "Sensor OK");
+  u8g2.sendBuffer();
+
+  Serial.println("System ready");
+}
+
+void loop() {
+  VL53L0X_RangingMeasurementData_t measure;
+  lox.rangingTest(&measure, false);
+
+  u8g2.clearBuffer();
+  u8g2.setFont(u8g2_font_6x12_tf);
+
+  if (measure.RangeStatus != 4) {
+    int distance = measure.RangeMilliMeter;
+
+    Serial.print("Distance: ");
+    Serial.print(distance);
+    Serial.println(" mm");
+
+    u8g2.drawStr(0, 12, "Distance");
+
+    char buf[16];
+    sprintf(buf, "%d mm", distance);
+
+    u8g2.setFont(u8g2_font_logisoso16_tf);
+    u8g2.drawStr(0, 38, buf);
+  } else {
+    Serial.println("Out of range");
+    u8g2.drawStr(0, 20, "Out of range");
+  }
+
+  u8g2.sendBuffer();
+  delay(200);
+}
