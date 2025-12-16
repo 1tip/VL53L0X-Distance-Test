@@ -1,0 +1,144 @@
+/***************************************************************
+ * ESP32-C3 + TOF200C (VL53L0X) + 0.42" OLED
+ *
+ * Summary:
+ *  - TOF200C 센서를 VL53L0X로 사용 (0~200cm)
+ *  - 거리(mm) OLED + Serial 출력 (Offset 보정 적용)
+ *  - OLED: SSD1306 72x40 (EastRising), U8g2 _F_ 버퍼 사용
+ *  - Offset: 측정값 -30mm (0mm 이하 클램프)
+ *  - Out of range (RangeStatus=4 또는 0mm) 5초 지속 시 OLED 디밍
+ *  - 부팅 후 5분 경과 시 OLED 디밍
+ *
+ * Fixed I2C Pins (Board Internal):
+ *  - SDA : GPIO 5
+ *  - SCL : GPIO 6
+ ***************************************************************/
+
+#include <Wire.h>
+#include <Adafruit_VL53L0X.h>
+#include <U8g2lib.h>
+
+// -------- FIXED I2C PINS --------
+#define OLED_SDA 5
+#define OLED_SCL 6
+
+// -------- DISTANCE OFFSET --------
+#define DISTANCE_OFFSET_MM 30   // 전체 거리에서 차감할 값
+
+// -------- OLED BRIGHTNESS CONTROL --------
+#define NORMAL_CONTRAST   255
+#define DIM_CONTRAST      1
+
+#define OUT_RANGE_DIM_TIME 5000UL
+#define BOOT_DIM_TIME      300000UL
+
+// -------- OBJECTS --------
+Adafruit_VL53L0X lox;
+U8G2_SSD1306_72X40_ER_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE);
+
+// -------- TIME CONTROL --------
+unsigned long bootTime;
+unsigned long outRangeStart = 0;
+bool isDimmed = false;
+
+void setup() {
+  Serial.begin(115200);
+  delay(500);
+
+  bootTime = millis();
+  isDimmed = false;
+
+  Wire.begin(OLED_SDA, OLED_SCL);
+  Wire.setClock(400000);
+
+  u8g2.begin();
+  u8g2.setContrast(NORMAL_CONTRAST);
+  u8g2.clearBuffer();
+  u8g2.setFont(u8g2_font_6x12_tf);
+  u8g2.drawStr(0, 12, "VL53L0X");
+  u8g2.drawStr(0, 28, "Init...");
+  u8g2.sendBuffer();
+
+  if (!lox.begin()) {
+    u8g2.clearBuffer();
+    u8g2.drawStr(0, 20, "TOF ERROR");
+    u8g2.sendBuffer();
+    Serial.println("VL53L0X init failed");
+    while (1) delay(100);
+  }
+
+  lox.configSensor(Adafruit_VL53L0X::VL53L0X_SENSE_HIGH_ACCURACY);
+
+  u8g2.clearBuffer();
+  u8g2.drawStr(0, 20, "Sensor OK");
+  u8g2.sendBuffer();
+
+  Serial.println("System ready");
+}
+
+void loop() {
+  VL53L0X_RangingMeasurementData_t measure;
+  lox.rangingTest(&measure, false);
+
+  unsigned long now = millis();
+
+  // -------- Out of range 판정 --------
+  bool outOfRange =
+      (measure.RangeStatus == 4) ||
+      (measure.RangeMilliMeter == 0);
+
+  // -------- Out of range 타이머 --------
+  if (outOfRange) {
+    if (outRangeStart == 0) {
+      outRangeStart = now;
+    }
+  } else {
+    outRangeStart = 0;
+
+    if (isDimmed) {
+      u8g2.setContrast(NORMAL_CONTRAST);
+      isDimmed = false;
+    }
+  }
+
+  // -------- 디밍 조건 --------
+  if (!isDimmed) {
+    if (outRangeStart != 0 && (now - outRangeStart >= OUT_RANGE_DIM_TIME)) {
+      u8g2.setContrast(DIM_CONTRAST);
+      isDimmed = true;
+    }
+
+    if (now - bootTime >= BOOT_DIM_TIME) {
+      u8g2.setContrast(DIM_CONTRAST);
+      isDimmed = true;
+    }
+  }
+
+  // -------- OLED 출력 --------
+  u8g2.clearBuffer();
+  u8g2.setFont(u8g2_font_6x12_tf);
+  u8g2.drawStr(0, 12, "Distance");
+
+  if (!outOfRange) {
+    int corrected = measure.RangeMilliMeter - DISTANCE_OFFSET_MM;
+    if (corrected < 0) corrected = 0;
+
+    Serial.print("Distance: ");
+    Serial.print(corrected);
+    Serial.println(" mm");
+
+    char buf[16];
+    sprintf(buf, "%d mm", corrected);
+
+    u8g2.setFont(u8g2_font_logisoso16_tf);
+    u8g2.drawStr(0, 38, buf);
+  } else {
+    Serial.println("Out of range");
+
+    u8g2.setFont(u8g2_font_logisoso16_tf);
+    u8g2.drawStr(0, 38, "-- mm");
+  }
+
+  u8g2.sendBuffer();
+  delay(200);
+}
