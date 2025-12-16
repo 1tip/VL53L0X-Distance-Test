@@ -82,7 +82,11 @@ void loop() {
     u8g2.drawStr(0, 38, buf);
   } else {
     Serial.println("Out of range");
-    u8g2.drawStr(0, 20, "Out of range");
+
+    u8g2.drawStr(0, 12, "Distance");
+    u8g2.setFont(u8g2_font_logisoso16_tf);
+    u8g2.drawStr(0, 38, "-- mm");
+    //u8g2.drawStr(0, 20, "Out of range");
   }
 
   u8g2.sendBuffer();
