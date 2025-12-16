@@ -1,0 +1,72 @@
+/***************************************************************
+ * ESP32-C3 + VL53L0X Distance Test
+ *
+ * Summary:
+ *  - TOF050C를 VL53L0X로 가정
+ *  - I2C 통신 기반 거리(mm) 측정
+ *  - 연속 측정 모드 사용
+ *
+ * Hardware:
+ *  - SDA   : GPIO 4
+ *  - SCL   : GPIO 5
+ *  - XSHUT : GPIO 6 (optional)
+ ***************************************************************/
+
+#include <Wire.h>
+#include <Adafruit_VL53L0X.h>
+
+// ---------------- PIN CONFIG ----------------
+#define I2C_SDA   4
+#define I2C_SCL   5
+#define XSHUT_PIN 6   // 사용하지 않으면 주석 처리 가능
+
+Adafruit_VL53L0X lox = Adafruit_VL53L0X();
+
+void setup() {
+  Serial.begin(115200);
+  delay(1000);
+
+  Serial.println();
+  Serial.println("ESP32-C3 VL53L0X Distance Test");
+
+#ifdef XSHUT_PIN
+  pinMode(XSHUT_PIN, OUTPUT);
+  digitalWrite(XSHUT_PIN, HIGH); // 센서 활성
+  delay(10);
+#endif
+
+  // I2C 시작
+  Wire.begin(I2C_SDA, I2C_SCL);
+  Wire.setClock(400000); // 400kHz 권장
+
+  // VL53L0X 초기화
+  if (!lox.begin()) {
+    Serial.println("ERROR: Failed to boot VL53L0X");
+    while (1) {
+      delay(10);
+    }
+  }
+
+  Serial.println("VL53L0X detected successfully.");
+
+  // 측정 정확도 향상 (선택)
+  lox.configSensor(Adafruit_VL53L0X::VL53L0X_SENSE_HIGH_ACCURACY);
+
+  Serial.println("Sensor ready.");
+}
+
+void loop() {
+  VL53L0X_RangingMeasurementData_t measure;
+
+  lox.rangingTest(&measure, false); // false = 디버그 출력 비활성
+
+  if (measure.RangeStatus != 4) {   // 4 = Out of range
+    Serial.print("Distance: ");
+    Serial.print(measure.RangeMilliMeter);
+    Serial.println(" mm");
+  } else {
+    Serial.println("Out of range");
+  }
+
+  delay(200);
+}
